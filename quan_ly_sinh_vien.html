@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quản lý Sinh viên – B-Tree Index</title>
+<style>
+  /* Reset CSS cơ bản */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* =========================================
+     Khai báo các biến CSS (Custom Properties)
+     giúp dễ dàng quản lý màu sắc và giao diện
+     ========================================= */
+  :root {
+    --bg: #f5f5f4;
+    --surface: #ffffff;
+    --surface2: #f1efe8;
+    --border: rgba(0,0,0,0.12);
+    --border2: rgba(0,0,0,0.22);
+    --text: #1a1a18;
+    --text2: #5f5e5a;
+    --text3: #888780;
+    --radius: 10px;
+    --radius-sm: 6px;
+    /* Các màu cho trạng thái (Thêm/Tìm, Cảnh báo, Lỗi) */
+    --blue-bg: #E6F1FB; --blue-border: #185FA5; --blue-text: #0C447C;
+    --green-bg: #EAF3DE; --green-border: #3B6D11; --green-text: #27500A;
+    --red-bg: #FCEBEB; --red-border: #A32D2D; --red-text: #791F1F;
+    --info-bg: #dbeafe; --info-text: #1e40af;
+  }
+
+  /* Hỗ trợ chế độ nền tối (Dark Mode) tự động theo hệ thống */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1a; --surface: #262624; --surface2: #2c2c2a;
+      --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+      --text: #e8e6de; --text2: #b4b2a9; --text3: #888780;
+      --blue-bg: #0C2A4A; --blue-border: #378ADD; --blue-text: #B5D4F4;
+      --green-bg: #173404; --green-border: #639922; --green-text: #C0DD97;
+      --red-bg: #2d0f0f; --red-border: #E24B4A; --red-text: #F7C1C1;
+      --info-bg: #1e3a5f; --info-text: #93c5fd;
+    }
+  }
+
+  body {
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    min-height: 100vh;
+    padding: 20px;
+  }
+
+  header { margin-bottom: 20px; }
+  header h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  header p  { font-size: 13px; color: var(--text2); }
+
+  /* Bố cục chia 2 cột: Cột trái (320px) cho Form, Cột phải cho Bảng */
+  .layout { display: grid; grid-template-columns: 320px 1fr; gap: 16px; }
+  /* Chuyển thành 1 cột trên màn hình nhỏ */
+  @media (max-width: 750px) { .layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .card h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text); }
+
+  /* CSS cho các Tab điều hướng */
+  .tabs { display: flex; gap: 4px; margin-bottom: 12px; }
+  .tab {
+    padding: 5px 14px; border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border); background: var(--surface2);
+    color: var(--text2); cursor: pointer; font-size: 12px; font-weight: 500;
+    transition: all .15s;
+  }
+  .tab.active { background: var(--blue-bg); color: var(--blue-text); border-color: var(--blue-border); }
+
+  /* CSS cho Form nhập liệu */
+  .field { margin-bottom: 10px; }
+  .field label { display: block; font-size: 11px; font-weight: 500; color: var(--text2); margin-bottom: 4px; }
+  .field input, .field select {
+    width: 100%; padding: 7px 10px;
+    border: 0.5px solid var(--border2); border-radius: var(--radius-sm);
+    background: var(--surface2); color: var(--text); font-size: 13px;
+    outline: none; transition: border-color .15s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--blue-border); }
+
+  /* CSS cho Buttons */
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  button {
+    padding: 7px 16px; border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border2); background: var(--surface2);
+    color: var(--text); cursor: pointer; font-size: 12px; font-weight: 500;
+    transition: all .15s;
+  }
+  button:hover { background: var(--bg); }
+  button.primary { background: var(--blue-bg); color: var(--blue-text); border-color: var(--blue-border); }
+  button.primary:hover { opacity: .85; }
+  button.danger { background: var(--red-bg); color: var(--red-text); border-color: var(--red-border); }
+  button.danger:hover { opacity: .85; }
+
+  /* Khu vực hiển thị thông báo log */
+  .log {
+    margin-top: 10px; padding: 8px 10px; font-size: 12px; line-height: 1.6;
+    background: var(--surface2); border-radius: var(--radius-sm);
+    border: 0.5px solid var(--border); color: var(--text2); min-height: 40px;
+  }
+
+  /* CSS cho Bảng dữ liệu */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; padding: 7px 10px; border-bottom: 0.5px solid var(--border2); color: var(--text2); font-weight: 600; white-space: nowrap; }
+  td { padding: 6px 10px; border-bottom: 0.5px solid var(--border); color: var(--text); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  /* Các màu highlight tương ứng cho dòng dữ liệu */
+  tr.hl-new td  { background: var(--blue-bg); color: var(--blue-text); }
+  tr.hl-found td{ background: var(--green-bg); color: var(--green-text); }
+  tr.hl-del td  { background: var(--red-bg); color: var(--red-text); }
+
+  /* CSS cho vùng vẽ B-Tree (SVG) */
+  .btree-card { margin-top: 16px; }
+  #btree-svg { width: 100%; display: block; overflow: visible; }
+  /* Nút (Node) cơ bản */
+  .node-rect { fill: var(--surface2); stroke: var(--border2); stroke-width: 0.5; transition: all 0.3s; }
+  /* Trạng thái của Node trên cây */
+  .node-rect.active  { fill: var(--blue-bg);  stroke: var(--blue-border);  stroke-width: 1.5; }
+  .node-rect.found   { fill: var(--green-bg); stroke: var(--green-border); stroke-width: 1.5; }
+  .node-rect.deleted { fill: var(--red-bg);   stroke: var(--red-border);   stroke-width: 1.5; }
+  
+  /* Chữ (Khóa) bên trong Node */
+  .node-key { font-size: 11px; fill: var(--text); font-family: 'Courier New', monospace; transition: all 0.3s; }
+  .node-key.active  { fill: var(--blue-text);  font-weight: 700; }
+  .node-key.found   { fill: var(--green-text); font-weight: 700; }
+  .node-key.deleted { fill: var(--red-text);   font-weight: 700; }
+  
+  /* Đường nối giữa các Node (Edges) */
+  .edge { stroke: var(--border2); stroke-width: 0.5; fill: none; transition: all 0.3s; }
+  .edge.active { stroke: var(--blue-border); stroke-width: 1; }
+  .divider { stroke: var(--border2); stroke-width: 0.5; }
+
+  /* Chú giải màu sắc */
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--text2); margin-top: 10px; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; border: 1px solid; display: inline-block; }
+
+  @media (max-width: 500px) {
+    body { padding: 12px; }
+    .legend { gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Quản lý Sinh viên – B-Tree Index</h1>
+  <p>B-Tree bậc 3 (mỗi node tối đa 2 khóa, tối đa 3 con). Mọi thao tác đều minh họa đường duyệt cây.</p>
+</header>
+
+<div class="layout">
+
+  <div>
+    <div class="card">
+      <h2>Thao tác</h2>
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('add')">Thêm</div>
+        <div class="tab" onclick="switchTab('delete')">Xóa</div>
+        <div class="tab" onclick="switchTab('search')">Tìm kiếm</div>
+      </div>
+
+      <div id="tab-add">
+        <div class="field"><label>Mã SV *</label><input id="f-id" placeholder="VD: SV006"></div>
+        <div class="field"><label>Họ và Tên *</label><input id="f-name" placeholder="Nguyễn Văn A"></div>
+        <div class="field"><label>Giới tính</label>
+          <select id="f-gender"><option>Nam</option><option>Nữ</option></select></div>
+        <div class="field"><label>Ngày sinh</label><input id="f-dob" placeholder="VD: 2003-05-12"></div>
+        <div class="field"><label>Lớp</label><input id="f-class" placeholder="VD: CNTT01"></div>
+        <div class="btn-row">
+          <button class="primary" onclick="addStudent()">+ Thêm sinh viên</button>
+          <button onclick="resetHighlight()">Bỏ highlight</button>
+        </div>
+        <div class="log" id="log-add">Nhập thông tin rồi nhấn Thêm.</div>
+      </div>
+
+      <div id="tab-delete" style="display:none">
+        <div class="field"><label>Mã SV cần xóa *</label><input id="d-id" placeholder="VD: SV001"></div>
+        <div class="btn-row">
+          <button class="danger" onclick="deleteStudent()">Xóa sinh viên</button>
+          <button onclick="resetHighlight()">Bỏ highlight</button>
+        </div>
+        <div class="log" id="log-delete">Nhập Mã SV và nhấn Xóa.</div>
+      </div>
+
+      <div id="tab-search" style="display:none">
+        <div class="tabs" style="margin-bottom:10px">
+          <div class="tab active" id="stab-id"   onclick="switchSearchTab('id')">Theo Mã SV</div>
+          <div class="tab"        id="stab-name" onclick="switchSearchTab('name')">Theo Họ tên</div>
+        </div>
+        <div id="sid-row"  class="field"><label>Mã SV</label>
+          <div style="display:flex;gap:6px"><input id="s-id" placeholder="VD: SV002" style="flex:1">
+          <button onclick="searchById()">Tìm</button></div></div>
+        <div id="sname-row" class="field" style="display:none"><label>Họ tên (hoặc một phần)</label>
+          <div style="display:flex;gap:6px"><input id="s-name" placeholder="VD: Bình" style="flex:1">
+          <button onclick="searchByName()">Tìm</button></div></div>
+        <button onclick="resetHighlight()" style="margin-top:4px">Bỏ highlight</button>
+        <div class="log" id="log-search">Nhập từ khóa và nhấn Tìm.</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Bảng dữ liệu sinh viên</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Mã SV</th><th>Họ và Tên</th><th>Giới tính</th><th>Ngày sinh</th><th>Lớp</th></tr></thead>
+          <tbody id="student-table">
+            </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="card btree-card">
+  <h2>B-Tree chỉ mục (bậc 3) — mỗi node: tối đa 2 khóa, tối đa 3 con</h2>
+  <div style="overflow-x:auto">
+    <svg id="btree-svg" viewBox="0 0 800 200"></svg>
+  </div>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--blue-bg);border-color:var(--blue-border)"></span>Đang duyệt</span>
+    <span><span class="dot" style="background:var(--green-bg);border-color:var(--green-border)"></span>Tìm thấy</span>
+    <span><span class="dot" style="background:var(--red-bg);border-color:var(--red-border)"></span>Xóa</span>
+    <span><span class="dot" style="background:var(--surface2);border-color:var(--border2)"></span>Node bình thường</span>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  1. DỮ LIỆU GIẢ LẬP BAN ĐẦU
+// ══════════════════════════════════════════
+let students = [
+  { id:'SV001', name:'Nguyễn Văn An',   gender:'Nam', dob:'2002-03-15', cls:'CNTT01' },
+  { id:'SV002', name:'Trần Thị Bình',   gender:'Nữ',  dob:'2003-07-22', cls:'CNTT01' },
+  { id:'SV003', name:'Lê Hoàng Cường',  gender:'Nam', dob:'2002-11-05', cls:'CNTT02' },
+  { id:'SV004', name:'Phạm Thị Dung',   gender:'Nữ',  dob:'2003-01-18', cls:'CNTT02' },
+  { id:'SV005', name:'Hoàng Minh Đức',  gender:'Nam', dob:'2002-09-30', cls:'CNTT03' },
+];
+
+// ══════════════════════════════════════════
+//  2. CẤU TRÚC DỮ LIỆU B-TREE (bậc 3)
+// ══════════════════════════════════════════
+const ORDER = 3; // Bậc của cây
+const MAX_KEYS = ORDER - 1; // Số khóa tối đa trong 1 node = 2
+
+// Lớp đại diện cho 1 Nút (Node) trên cây
+class BNode {
+  constructor() { 
+    this.keys = [];      // Mảng chứa các khóa (Mã SV)
+    this.children = [];  // Mảng chứa các node con
+    this.leaf = true;    // Mặc định tạo ra là node lá
+  }
+}
+
+// Lớp đại diện cho toàn bộ Cây B-Tree
+class BTree {
+  constructor() { this.root = new BNode(); } // Khởi tạo gốc
+
+  // Hàm Thêm mới một khóa
+  insert(key) {
+    const r = this.root;
+    // Nếu nút gốc bị đầy (có đủ 2 khóa), ta phải tách nó ra làm tăng chiều cao cây
+    if (r.keys.length === MAX_KEYS) {
+      const s = new BNode(); 
+      s.leaf = false;
+      s.children.push(this.root);
+      this._splitChild(s, 0); // Tách nút
+      this.root = s; // Cập nhật nút gốc mới
+    }
+    // Nếu chưa đầy thì chèn bình thường
+    this._insertNonFull(this.root, key);
+  }
+
+  // Hàm phụ trợ: Chèn vào node chưa bị đầy
+  _insertNonFull(node, key) {
+    let i = node.keys.length - 1;
+    if (node.leaf) {
+      // Nếu là node lá, dồn các phần tử lớn hơn về phía sau để chèn key vào đúng vị trí
+      node.keys.push('');
+      while (i >= 0 && key < node.keys[i]) { node.keys[i+1] = node.keys[i]; i--; }
+      node.keys[i+1] = key;
+    } else {
+      // Nếu không phải node lá, tìm con đường đi xuống phù hợp
+      while (i >= 0 && key < node.keys[i]) i--;
+      i++;
+      // Nếu node con bị đầy, tách node con trước khi đi xuống
+      if (node.children[i].keys.length === MAX_KEYS) {
+        this._splitChild(node, i);
+        if (key > node.keys[i]) i++;
+      }
+      this._insertNonFull(node.children[i], key);
+    }
+  }
+
+  // Hàm phụ trợ: Tách một node con bị đầy làm đôi
+  _splitChild(parent, i) {
+    const t = Math.floor(ORDER / 2); // t = 1
+    const y = parent.children[i];    // Node đang bị đầy
+    const z = new BNode();           // Node mới sẽ chứa nửa sau của y
+    z.leaf = y.leaf;
+    const mid = t - 1;               // Vị trí khóa giữa
+    
+    // Đưa nửa sau khóa của y sang z
+    z.keys = y.keys.splice(mid + 1);
+    const midKey = y.keys.splice(mid, 1)[0]; // Lấy khóa giữa đẩy lên node cha
+    
+    if (!y.leaf) z.children = y.children.splice(mid + 1); // Chia node con nếu có
+    
+    parent.children.splice(i+1, 0, z); // Thêm node z vào làm con của parent
+    parent.keys.splice(i, 0, midKey);  // Chèn khóa giữa vào parent
+  }
+
+  // Hàm Tìm kiếm: Trả về một mảng "path" lưu trữ các bước đi để làm animation
+  search(key) { return this._search(this.root, key, []); }
+
+  _search(node, key, path) {
+    let i = 0;
+    while (i < node.keys.length && key > node.keys[i]) i++;
+    const found = i < node.keys.length && node.keys[i] === key;
+    
+    // Ghi nhận node đã đi qua vào path
+    path.push({ node, i, found });
+    
+    if (found) return path; // Tìm thấy thì dừng
+    if (node.leaf) return path; // Đến node lá mà không có thì cũng dừng (không tìm thấy)
+    
+    // Tiếp tục tìm đệ quy ở node con
+    return this._search(node.children[i], key, path);
+  }
+
+  // Hàm Xóa một khóa (Phức tạp nhất trong B-Tree)
+  delete(key) {
+    this._delete(this.root, key);
+    // Nếu root mất hết khóa và không phải lá, root mới sẽ là đứa con duy nhất của nó
+    if (this.root.keys.length === 0 && !this.root.leaf)
+      this.root = this.root.children[0];
+  }
+
+  _delete(node, key) {
+    const t = Math.floor(ORDER / 2); // Số khóa tối thiểu = 1
+    let i = 0;
+    while (i < node.keys.length && key > node.keys[i]) i++;
+    
+    if (i < node.keys.length && node.keys[i] === key) {
+      // Trường hợp 1: Tìm thấy khóa trong node lá
+      if (node.leaf) { node.keys.splice(i, 1); }
+      // Trường hợp 2: Tìm thấy khóa trong node nội bộ
+      else {
+        let pred = node.children[i];
+        while (!pred.leaf) pred = pred.children[pred.children.length - 1]; // Tìm phần tử tiền nhiệm
+        node.keys[i] = pred.keys[pred.keys.length - 1]; // Thay thế bằng khóa tiền nhiệm
+        this._delete(node.children[i], node.keys[i]);   // Xóa khóa tiền nhiệm ở node dưới
+      }
+    } else {
+      // Không tìm thấy trong node hiện tại, phải đi xuống node con
+      if (node.leaf) return; // Nếu là node lá thì không tồn tại khóa này
+      
+      const child = node.children[i];
+      // Nếu node con sắp bị đi xuống không đủ khóa (bị underflow), ta cần làm đầy nó trước
+      if (child.keys.length < t) this._fill(node, i);
+      if (i >= node.children.length) i = node.children.length - 1;
+      this._delete(node.children[i], key);
+    }
+  }
+
+  // Hàm phụ trợ: Đảm bảo node con có đủ khóa trước khi đi xuống
+  _fill(parent, i) {
+    const t = Math.floor(ORDER / 2);
+    // Mượn khóa từ anh em bên trái nếu nó dư khóa
+    if (i > 0 && parent.children[i-1].keys.length >= t+1)
+      this._borrowFromPrev(parent, i);
+    // Mượn khóa từ anh em bên phải nếu nó dư khóa
+    else if (i < parent.children.length-1 && parent.children[i+1].keys.length >= t+1)
+      this._borrowFromNext(parent, i);
+    // Nếu cả 2 anh em đều thiếu khóa, tiến hành Gộp (Merge)
+    else {
+      if (i < parent.children.length-1) this._merge(parent, i);
+      else this._merge(parent, i-1);
+    }
+  }
+
+  _borrowFromPrev(parent, i) {
+    const child = parent.children[i], sib = parent.children[i-1];
+    child.keys.unshift(parent.keys[i-1]); // Đưa khóa cha xuống con
+    parent.keys[i-1] = sib.keys.pop();    // Đưa khóa cuối của anh em lên cha
+    if (!sib.leaf) child.children.unshift(sib.children.pop());
+  }
+
+  _borrowFromNext(parent, i) {
+    const child = parent.children[i], sib = parent.children[i+1];
+    child.keys.push(parent.keys[i]);      // Đưa khóa cha xuống con
+    parent.keys[i] = sib.keys.shift();    // Đưa khóa đầu của anh em lên cha
+    if (!sib.leaf) child.children.push(sib.children.shift());
+  }
+
+  _merge(parent, i) {
+    const left = parent.children[i], right = parent.children[i+1];
+    left.keys.push(parent.keys[i]);       // Đưa khóa cha xuống
+    left.keys = left.keys.concat(right.keys); // Nối khóa của node bên phải sang
+    if (!left.leaf) left.children = left.children.concat(right.children);
+    parent.keys.splice(i, 1);             // Xóa khóa ở node cha
+    parent.children.splice(i+1, 1);       // Xóa con bên phải
+  }
+}
+
+// Khởi tạo đối tượng BTree
+let tree = new BTree();
+
+// Cấu trúc lưu trạng thái màu sắc cho Giao diện
+let hlMap  = {};   // Key (Mã SV) -> trạng thái ('active' | 'found' | 'deleted') để bôi màu trên SVG
+let hlRows = {};   // id (Mã SV)  -> CSS class ('hl-new' | 'hl-found' | 'hl-del') để bôi màu dòng của Bảng
+
+// Khởi tạo cây ban đầu từ mảng sinh viên
+function rebuildTree() {
+  tree = new BTree();
+  students.forEach(s => tree.insert(s.id));
+}
+rebuildTree();
+
+
+// ══════════════════════════════════════════
+//  3. CÁC HÀM TIỆN ÍCH UI (UI HELPERS)
+// ══════════════════════════════════════════
+// Hàm tạo độ trễ (dùng cho hiệu ứng chạy chậm lại để dễ nhìn)
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Xóa tất cả các trạng thái bôi màu và vẽ lại mặc định
+function resetHighlight() { hlMap = {}; hlRows = {}; renderTable(); renderBTree(); }
+
+// Xử lý chuyển đổi qua lại giữa các Tab (Thêm/Xóa/Tìm)
+let curTab = 'add';
+function switchTab(t) {
+  ['add','delete','search'].forEach(x =>
+    document.getElementById('tab-' + x).style.display = x === t ? '' : 'none');
+  document.querySelectorAll('.tabs .tab').forEach((el, i) =>
+    el.classList.toggle('active', ['add','delete','search'][i] === t));
+  curTab = t;
+  resetHighlight();
+}
+
+// Chuyển Tab tìm kiếm con (Tìm theo Mã SV / Tìm theo Tên)
+let curStab = 'id';
+function switchSearchTab(t) {
+  curStab = t;
+  document.getElementById('sid-row').style.display   = t === 'id'   ? '' : 'none';
+  document.getElementById('sname-row').style.display = t === 'name' ? '' : 'none';
+  document.getElementById('stab-id').classList.toggle('active', t === 'id');
+  document.getElementById('stab-name').classList.toggle('active', t === 'name');
+}
+
+
+// ══════════════════════════════════════════
+//  4. HÀM HIỂN THỊ DỮ LIỆU (RENDER)
+// ══════════════════════════════════════════
+// Vẽ lại bảng dữ liệu HTML bằng cách map qua mảng sinh viên
+function renderTable() {
+  document.getElementById('student-table').innerHTML =
+    students.map(s => `<tr class="${hlRows[s.id]||''}">
+      <td>${s.id}</td><td>${s.name}</td><td>${s.gender}</td><td>${s.dob}</td><td>${s.cls}</td>
+    </tr>`).join('');
+}
+
+// Tính toán Tọa độ (x, y) cho từng node để chuẩn bị vẽ lên SVG
+function layout(node, depth, x, width, out) {
+  const W = node.keys.length === 2 ? 118 : 68; // Chiều dài node phụ thuộc số khóa (1 hoặc 2)
+  const H = 28; // Chiều cao node
+  const cx = x + width / 2; // Tâm X
+  const cy = 32 + depth * 72; // Tâm Y phụ thuộc độ sâu (depth)
+  
+  out.push({ node, cx, cy, W, H });
+  
+  if (!node.leaf)
+    // Nếu có con, đệ quy chia khoảng cách (width) cho các con
+    node.children.forEach((ch, i) =>
+      layout(ch, depth+1, x + i*(width/node.children.length),
+             width/node.children.length, out));
+  return out;
+}
+
+// Xác định trạng thái màu của Node (nếu có khóa bên trong đang được highlight)
+function nodeState(node) {
+  for (const k of node.keys) {
+    if (hlMap[k] === 'found')   return 'found';
+    if (hlMap[k] === 'deleted') return 'deleted';
+    if (hlMap[k] === 'active')  return 'active';
+  }
+  return '';
+}
+
+// Hàm vẽ chính tạo ra các thẻ SVG (<rect>, <line>, <text>) và chèn vào DOM
+function renderBTree() {
+  const svg = document.getElementById('btree-svg');
+  const nodes = layout(tree.root, 0, 0, 800, []); // Lấy tọa độ
+  
+  // Tự động kéo dài SVG nếu cây quá sâu
+  const maxY = Math.max(...nodes.map(n => n.cy)) + 48;
+  svg.setAttribute('viewBox', `0 0 800 ${Math.max(maxY, 80)}`);
+
+  let edges = '', rects = '';
+
+  nodes.forEach(({ node, cx, cy, W, H }) => {
+    // 1. Vẽ các đường nối (edges) tới node con
+    if (!node.leaf)
+      node.children.forEach(ch => {
+        const c = nodes.find(n => n.node === ch);
+        if (!c) return;
+        const isActive = node.keys.some(k => hlMap[k]); // Đổi màu đường nối nếu đang duyệt qua
+        edges += `<line class="edge${isActive?' active':''}" x1="${cx}" y1="${cy+H/2}" x2="${c.cx}" y2="${c.cy-H/2}"/>`;
+      });
+
+    // 2. Vẽ Node (Hình chữ nhật)
+    const ns = nodeState(node);
+    const x = cx - W/2, y = cy - H/2;
+    rects += `<g>`;
+    rects += `<rect class="node-rect ${ns}" x="${x}" y="${y}" width="${W}" height="${H}" rx="5"/>`;
+
+    // 3. Chèn Chữ (Mã SV) vào trong Node
+    if (node.keys.length === 2) {
+      const kw = W / 2;
+      node.keys.forEach((k, i) => {
+        const ks = hlMap[k] || '';
+        rects += `<text class="node-key ${ks}" x="${x + kw*i + kw/2}" y="${cy+1}"
+          text-anchor="middle" dominant-baseline="central">${k}</text>`;
+      });
+      // Vạch ngăn cách giữa 2 khóa
+      rects += `<line class="divider" x1="${x+W/2}" y1="${y}" x2="${x+W/2}" y2="${y+H}"/>`;
+    } else if (node.keys.length === 1) {
+      const ks = hlMap[node.keys[0]] || '';
+      rects += `<text class="node-key ${ks}" x="${cx}" y="${cy+1}"
+        text-anchor="middle" dominant-baseline="central">${node.keys[0]}</text>`;
+    }
+
+    rects += `</g>`;
+  });
+
+  // Chèn mã SVG vào giao diện
+  svg.innerHTML = edges + rects;
+}
+
+// Hàm tạo hiệu ứng animation khi duyệt cây B-Tree
+async function animatePath(path, finalState) {
+  for (let step = 0; step < path.length; step++) {
+    const { node, found } = path[step];
+    // Tắt highlight node cũ
+    Object.keys(hlMap).forEach(k => { if (hlMap[k] === 'active') delete hlMap[k]; });
+    
+    // Highlight node hiện tại
+    node.keys.forEach(k => {
+      hlMap[k] = (found && step === path.length - 1) ? finalState : 'active';
+    });
+    
+    renderBTree(); // Vẽ lại để thấy màu
+    await delay(430); // Đợi 430ms để mắt người thấy được hiệu ứng
+  }
+}
+
+
+// ══════════════════════════════════════════
+//  5. CÁC THAO TÁC XỬ LÝ SỰ KIỆN CHÍNH
+// ══════════════════════════════════════════
+
+// Xử lý nút Thêm Sinh Viên
+async function addStudent() {
+  const id    = document.getElementById('f-id').value.trim();
+  const name  = document.getElementById('f-name').value.trim();
+  const gender= document.getElementById('f-gender').value;
+  const dob   = document.getElementById('f-dob').value.trim();
+  const cls   = document.getElementById('f-class').value.trim();
+  const log   = document.getElementById('log-add');
+
+  // Kiểm tra tính hợp lệ
+  if (!id || !name) { log.textContent = '⚠ Vui lòng nhập Mã SV và Họ tên.'; return; }
+  if (students.find(s => s.id === id)) { log.textContent = `⚠ Mã SV "${id}" đã tồn tại.`; return; }
+
+  // 1. Đẩy vào mảng Dữ liệu
+  students.push({ id, name, gender, dob: dob||'—', cls: cls||'—' });
+  // 2. Chèn Mã SV vào cây B-Tree
+  tree.insert(id);
+
+  resetHighlight();
+  hlRows[id] = 'hl-new'; // Bôi màu xanh dương cho dòng mới thêm
+  renderTable();
+
+  // 3. Mô phỏng đường dẫn vừa thêm trên B-Tree
+  const path = tree.search(id);
+  await animatePath(path, 'found');
+  hlMap[id] = 'found';
+  renderBTree();
+
+  log.textContent = `✓ Đã thêm "${id} – ${name}" vào bảng và B-Tree.`;
+  // Xóa form nhập liệu
+  ['f-id','f-name','f-dob','f-class'].forEach(x => document.getElementById(x).value = '');
+}
+
+// Xử lý nút Xóa Sinh Viên
+async function deleteStudent() {
+  const id  = document.getElementById('d-id').value.trim();
+  const log = document.getElementById('log-delete');
+  if (!id) { log.textContent = '⚠ Vui lòng nhập Mã SV.'; return; }
+
+  const idx = students.findIndex(s => s.id === id);
+  if (idx === -1) { log.textContent = `⚠ Không tìm thấy "${id}".`; return; }
+
+  resetHighlight();
+  
+  // 1. Mô phỏng tìm thấy node trước khi xóa (bôi màu đỏ)
+  const path = tree.search(id);
+  await animatePath(path, 'deleted');
+  hlMap[id] = 'deleted';
+  hlRows[id] = 'hl-del';
+  renderTable();
+  renderBTree();
+  await delay(700); // Ngừng một chút để xem màu đỏ
+
+  // 2. Thực thi xóa khỏi mảng và B-Tree
+  students.splice(idx, 1);
+  tree.delete(id);
+  
+  // Dọn dẹp highlight và vẽ lại lần cuối
+  delete hlMap[id];
+  delete hlRows[id];
+  renderTable();
+  renderBTree();
+
+  log.textContent = `✓ Đã xóa "${id}" khỏi bảng và B-Tree.`;
+  document.getElementById('d-id').value = '';
+}
+
+// Xử lý Tìm kiếm theo Mã Sinh Viên (Sử dụng trực tiếp B-Tree - Tốc độ nhanh O(log n))
+async function searchById() {
+  const id  = document.getElementById('s-id').value.trim();
+  const log = document.getElementById('log-search');
+  if (!id) { log.textContent = '⚠ Nhập Mã SV cần tìm.'; return; }
+
+  resetHighlight();
+  
+  // Dùng B-Tree để tìm đường dẫn đi xuống
+  const path = tree.search(id);
+  await animatePath(path, 'found'); // Chạy hiệu ứng
+
+  const found = students.find(s => s.id === id);
+  if (found) {
+    hlMap[id]  = 'found';
+    hlRows[id] = 'hl-found';
+    renderTable(); renderBTree();
+    log.textContent = `✓ Tìm thấy: ${found.id} – ${found.name} (${found.gender}, ${found.cls})`;
+  } else {
+    log.textContent = `✗ Không tìm thấy Mã SV "${id}".`;
+  }
+}
+
+// Xử lý Tìm kiếm theo Tên (Phải duyệt qua mảng dữ liệu - Tốc độ chậm hơn O(n))
+async function searchByName() {
+  const q   = document.getElementById('s-name').value.trim().toLowerCase();
+  const log = document.getElementById('log-search');
+  if (!q) { log.textContent = '⚠ Nhập tên cần tìm.'; return; }
+
+  resetHighlight();
+  
+  // Lọc trực tiếp trên mảng students (Linear Scan)
+  const matches = students.filter(s => s.name.toLowerCase().includes(q));
+  if (!matches.length) { log.textContent = `✗ Không tìm thấy sinh viên tên chứa "${q}".`; return; }
+
+  // Hiển thị vị trí các kết quả tìm thấy trên cây B-Tree
+  for (const m of matches) {
+    const path = tree.search(m.id);
+    path.forEach(({ node }) => node.keys.forEach(k => { hlMap[k] = 'active'; }));
+    hlRows[m.id] = 'hl-found';
+    await delay(200);
+  }
+  
+  matches.forEach(m => { hlMap[m.id] = 'found'; });
+  renderTable(); renderBTree();
+  log.textContent = `✓ Tìm thấy ${matches.length} sinh viên: ${matches.map(m=>m.id+' – '+m.name).join('; ')}`;
+}
+
+// ══════════════════════════════════════════
+//  6. KHỞI TẠO (INIT)
+// ══════════════════════════════════════════
+// Khi tải trang xong, vẽ giao diện lần đầu tiên
+renderTable();
+renderBTree();
+</script>
+</body>
+</html>
